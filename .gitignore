@@ -1,0 +1,51 @@
+# ── Virtual environment ────────────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── Python cache ───────────────────────────────────────────────
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+.Python
+
+# ── Environment / Secrets — NEVER commit ──────────────────────
+.env
+.env.*
+.envbackend
+
+# ── Test artifacts ─────────────────────────────────────────────
+.pytest_cache/
+test_foryou.db
+local_dev.db
+*.db
+htmlcov/
+.coverage
+coverage.xml
+
+# ── Temp / dev scripts ─────────────────────────────────────────
+run_tests.py
+_check.py
+
+# ── Build / dist ───────────────────────────────────────────────
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── IDE ────────────────────────────────────────────────────────
+.vscode/
+.idea/
+
+# ── OS ─────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Logs ───────────────────────────────────────────────────────
+*.log
+backend.out.log
+backend.err.log
