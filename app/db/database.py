@@ -98,9 +98,11 @@ def _can_reach_mysql(max_retries: int = 2) -> bool:
     """
     for attempt in range(max_retries):
         connect_args = _build_connect_args()
+        # PyMySQL needs connect_timeout inside connect_args dict
+        connect_args["connect_timeout"] = 8
         engine = create_engine(
             settings.database_url,
-            connect_args={**connect_args, "connect_timeout": 3},
+            connect_args=connect_args,
             poolclass=pool.NullPool,
             echo=False,
         )
@@ -109,16 +111,10 @@ def _can_reach_mysql(max_retries: int = 2) -> bool:
                 conn.execute(text("SELECT 1"))
             logger.debug(f"✓ MySQL connectivity check passed")
             return True
-        except (socket.timeout, ConnectionRefusedError) as exc:
-            if attempt < max_retries - 1:
-                wait_time = 0.5 * (2 ** attempt)  # exponential backoff: 0.5s, 1s
-                logger.warning(f"MySQL connection attempt {attempt + 1} failed: {exc}. Retrying in {wait_time}s...")
-                time.sleep(wait_time)
-            else:
-                logger.warning(f"MySQL connectivity test failed after {max_retries} attempts: {exc}")
         except Exception as exc:
-            logger.warning(f"MySQL connectivity test failed: {exc}")
-            return False
+            logger.warning(f"MySQL connectivity test attempt {attempt + 1} failed: {type(exc).__name__}: {str(exc)[:120]}")
+            if attempt < max_retries - 1:
+                time.sleep(1)
     
     return False
 
