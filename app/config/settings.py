@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     DEBUG:    bool = True
 
     # ── CORS — comma-separated list of allowed origins ─────────────────────────
-    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    CORS_ORIGINS: str = "https://linkfrontend.onrender.com,http://localhost:3000"
     ADMIN_KEY_HASH: str = "31296e7fe96a8441e7ec335812a3a5777c046269d7c132800858b2dcfec56e01"
 
     # ── Computed properties ────────────────────────────────────────────────────
