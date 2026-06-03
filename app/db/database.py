@@ -55,19 +55,22 @@ def _build_connect_args() -> dict:
 
 def _build_engine():
     """Build the database engine with appropriate configuration for the environment."""
-    if settings.DB_FALLBACK_SQLITE and not _can_reach_mysql():
-        logger.warning(
-            "MySQL %s:%s unreachable. Using SQLite fallback: %s",
-            settings.DB_HOST,
-            settings.DB_PORT,
-            settings.SQLITE_DB_FILE,
-        )
-        return create_engine(
-            settings.sqlite_url,
-            connect_args={"check_same_thread": False},
-            pool_pre_ping=True,
-            echo=settings.DEBUG,
-        )
+    if settings.DB_FALLBACK_SQLITE:
+        if not _can_reach_mysql():
+            logger.warning(
+                "MySQL %s:%s unreachable. Using SQLite fallback: %s",
+                settings.DB_HOST,
+                settings.DB_PORT,
+                settings.SQLITE_DB_FILE,
+            )
+            return create_engine(
+                settings.sqlite_url,
+                connect_args={"check_same_thread": False},
+                pool_pre_ping=True,
+                echo=settings.DEBUG,
+            )
+    elif os.getenv("VERCEL"):
+        logger.info("VERCEL environment detected and SQLite fallback is disabled.")
 
     connect_args = _build_connect_args()
     

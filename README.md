@@ -60,8 +60,13 @@ DB_USER=avnadmin
 DB_PASSWORD=your_password
 DB_NAME=defaultdb
 DB_SSL_CA=ssl/ca.pem
+DB_FALLBACK_SQLITE=False
 APP_PORT=8081
 ```
+
+> Note: `DB_FALLBACK_SQLITE` is disabled by default so production failures surface immediately. Enable it only for local development when you want a lightweight fallback.
+>
+> If only the MySQL database is down, `/health/db` will show a focused database diagnostic message while the rest of the API is still running.
 
 ### 3. Run migrations
 ```cmd
@@ -76,6 +81,9 @@ py run.py
 - API: http://localhost:8081/api/templates
 - Docs: http://localhost:8081/docs
 - Health: http://localhost:8081/health
+- DB diagnostic: http://localhost:8081/health/db
+
+> If only database connectivity is failing, use `/health/db` to verify MySQL credentials, SSL CA path, and network access.
 
 ---
 

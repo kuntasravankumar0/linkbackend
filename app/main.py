@@ -195,6 +195,22 @@ def health():
         "database": engine.url.drivername,
     }
 
+def get_database_hint() -> str:
+    """Provide a human-friendly hint when the database is the only failing subsystem."""
+    if "mysql" in engine.url.drivername:
+        return (
+            "If the only issue is MySQL/database connectivity, verify DB credentials, SSL CA path, "
+            "and network access. The API services are otherwise configured to run."
+        )
+
+    if "sqlite" in engine.url.drivername:
+        return (
+            "SQLite fallback is active. For production, disable DB_FALLBACK_SQLITE and use cloud MySQL."
+        )
+
+    return "For database diagnostics, use /health/db."
+
+
 @app.get("/health/db", tags=["System"])
 def database_health():
     """Safe production DB diagnostic: no credentials, only schema/query status."""
@@ -218,6 +234,11 @@ def database_health():
                     )
                 ).mappings().first() is not None
 
+        result["message"] = (
+            "Database check passed. If the rest of the API is reachable and this fails, "
+            "your MySQL/database connection is likely the only problem."
+        )
+        result["hint"] = get_database_hint()
         return result
     except Exception as exc:
         return JSONResponse(
@@ -227,8 +248,14 @@ def database_health():
                 "database": engine.url.drivername,
                 "error_type": type(exc).__name__,
                 "error": str(exc)[:500],
+                "message": (
+                    "If this is the only issue, your database/MySQL connection is likely failing while "
+                    "the rest of the API remains available."
+                ),
+                "hint": get_database_hint(),
             },
         )
+
 
 @app.get("/", tags=["System"])
 def root():
@@ -236,5 +263,7 @@ def root():
         "message": "ForYou API is running",
         "docs": "/docs",
         "health": "/health",
+        "database_health": "/health/db",
+        "database_hint": get_database_hint(),
         "api": "/api/templates",
     }

@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     DB_PASSWORD: str           = "yourpassword"
     DB_NAME:     str           = "defaultdb"
     DB_SSL_CA:   Optional[str] = None   # e.g. "ssl/ca.pem" for Aiven
-    DB_FALLBACK_SQLITE: bool   = True    # Set False in production via env var
+    DB_FALLBACK_SQLITE: bool   = False   # Disable fallback by default; enable only for local development
     SQLITE_DB_FILE: str        = "local_dev.db"
 
     # ── App ────────────────────────────────────────────────────────────────────
