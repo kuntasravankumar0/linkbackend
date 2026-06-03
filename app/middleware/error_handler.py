@@ -46,8 +46,24 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
     """Database errors — log full detail with context, return safe message to client."""
+    import os
     error_id = str(uuid.uuid4())
     error_msg = str(exc)
+    
+    # Check SSL certificate status
+    from app.config.settings import settings
+    ssl_status = {"configured": False}
+    if settings.DB_SSL_CA:
+        backend_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        ca_path = os.path.join(backend_root, settings.DB_SSL_CA)
+        ssl_status = {
+            "configured": True,
+            "path": ca_path,
+            "exists": os.path.exists(ca_path),
+        }
+        if not os.path.exists(ca_path):
+            ssl_status["vercel_path"] = f"/vercel/path0/{settings.DB_SSL_CA}"
+            ssl_status["vercel_exists"] = os.path.exists(ssl_status["vercel_path"])
     
     # Log the actual error for debugging with correlation ID
     logger.error(
@@ -59,6 +75,7 @@ async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
             "error_details": error_msg[:500],  # Limit length for logs
             "url": str(request.url),
             "method": request.method,
+            "ssl_status": ssl_status,
         }
     )
     
@@ -69,6 +86,7 @@ async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
             "message": "A database error occurred. Please try again.",
             "error_id": error_id,  # User can provide this for support
             "errors": None,
+            "ssl_diagnostic": ssl_status,  # Include in response for debugging
         },
     )
 

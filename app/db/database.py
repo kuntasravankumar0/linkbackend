@@ -37,23 +37,30 @@ def _build_connect_args() -> dict:
     logger.info(f"Backend root: {backend_root}")
 
     if not os.path.exists(ca_path):
-        # Try alternative path — might be in /vercel/path0 on Vercel
+        # Try alternative paths for different deployment environments
         alt_ca_paths = [
-            "/vercel/path0/ssl/ca.pem",
-            os.path.abspath(ca_path),
+            "/vercel/path0/ssl/ca.pem",  # Vercel serverless
+            os.path.abspath(ca_path),     # Absolute version of computed path
         ]
+        
+        # Aiven requires SSL — must find certificate
+        logger.warning(f"Primary SSL path not found: {ca_path}")
+        logger.info(f"Trying {len(alt_ca_paths)} alternative paths...")
+        
         found = False
         for alt_path in alt_ca_paths:
+            logger.debug(f"Checking: {alt_path}")
             if os.path.exists(alt_path):
                 ca_path = alt_path
                 found = True
-                logger.info(f"Found SSL cert at alternative path: {alt_path}")
+                logger.info(f"✓ Found SSL cert at alternative path: {alt_path}")
                 break
         
         if not found:
-            logger.error(f"SSL CA file NOT found at: {ca_path} or alternatives")
-            logger.error(f"Aiven requires SSL. Connection will likely fail.")
-            # For Aiven REQUIRED SSL, try with just ssl flag
+            logger.error(f"CRITICAL: SSL CA file NOT found at any location")
+            logger.error(f"Checked paths: {[ca_path] + alt_ca_paths}")
+            logger.error(f"Aiven requires SSL. Database connection will fail.")
+            # Try with just ssl=True flag (some drivers find cert in system store)
             connect_args["ssl"] = True
             return connect_args
 
