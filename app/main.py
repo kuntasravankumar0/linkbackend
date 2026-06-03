@@ -299,7 +299,7 @@ def ssl_health():
     # Check all possible certificate paths
     backend_root = os_module.path.dirname(os_module.path.dirname(os_module.path.dirname(__file__)))
     paths_to_check = [
-        ("computed", os_module.join(backend_root, settings.DB_SSL_CA)),
+        ("computed", os_module.path.join(backend_root, settings.DB_SSL_CA)),
         ("vercel", "/vercel/path0/ssl/ca.pem"),
         ("absolute", f"/{settings.DB_SSL_CA.lstrip('/')}" ),
     ]
