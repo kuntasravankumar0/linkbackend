@@ -86,7 +86,6 @@ async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
             "message": "A database error occurred. Please try again.",
             "error_id": error_id,  # User can provide this for support
             "errors": None,
-            "ssl_diagnostic": ssl_status,  # Include in response for debugging
         },
     )
 

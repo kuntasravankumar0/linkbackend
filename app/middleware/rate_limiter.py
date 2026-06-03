@@ -18,7 +18,7 @@ BURST_LIMIT = 20          # Max burst in 5 seconds
 BURST_WINDOW = 5
 
 # Exempt paths (health checks, SSE streams)
-EXEMPT_PATHS = {'/health', '/', '/docs', '/redoc', '/openapi.json'}
+EXEMPT_PATHS = {'/health', '/', '/health/db', '/health/ssl'}
 EXEMPT_PREFIXES = ('/api/chat/stream',)  # SSE streams are long-lived
 
 

@@ -35,7 +35,11 @@ def test_health(client):
 def test_root(client):
     r = client.get("/")
     assert r.status_code == 200
-    assert "docs" in r.json()
+    data = r.json()
+    assert "health" in data
+    assert "api" in data
+    # /docs is disabled in production (DEBUG=False)
+    assert "docs" not in data
 
 
 # ── Create ─────────────────────────────────────────────────────────────────────

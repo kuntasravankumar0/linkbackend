@@ -46,10 +46,21 @@ def _run_schema_setup():
             Base.metadata.create_all(bind=engine)
             logger.info("SQLite tables ready.")
         elif not os.getenv("VERCEL"):
-            logger.info("Running schema setup (background)...")
+            # Check if tables already exist — skip heavy migration if they do
+            logger.info("Checking schema (background)...")
+            try:
+                from sqlalchemy import inspect as sa_inspect
+                with engine.connect() as conn:
+                    existing_tables = sa_inspect(conn).get_table_names()
+                if "alldata" in existing_tables:
+                    logger.info("Tables exist — schema OK, skipping migration.")
+                    return
+            except Exception as e:
+                logger.warning(f"Table check failed: {e}")
+            # Fresh DB — run full setup
+            logger.info("Fresh DB detected — running schema setup...")
             ensure_database_schema(engine)
             logger.info("Schema setup complete.")
-            # Run Alembic migrations
             from alembic.config import Config
             from alembic import command
             backend_dir = os.path.dirname(os.path.abspath(__file__))
@@ -81,8 +92,10 @@ app = FastAPI(
         "All endpoints match the frontend's axios service exactly."
     ),
     version="2.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    # Disable Swagger UI and ReDoc in production (DEBUG=False)
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
+    openapi_url="/openapi.json" if settings.DEBUG else None,
     contact={"name": "ForYou Platform"},
 )
 
@@ -343,7 +356,6 @@ def ssl_health():
 def root():
     return {
         "message": "ForYou API is running",
-        "docs": "/docs",
         "health": "/health",
         "ssl_diagnostic": "/health/ssl",
         "database_health": "/health/db",
