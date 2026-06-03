@@ -12,7 +12,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config.settings import settings
-from app.db.database import Base, engine
+from app.db.database import engine
+from app.db.schema import ensure_database_schema
 from app.api.routes import templates, contact, chat
 from app.realtime.sse import router as sse_router
 from app.middleware.error_handler import (
@@ -39,11 +40,11 @@ try:
     
     # Import all models so Base.metadata knows about them
     from app.models import Project, ContactMessage, ChatMessage
+    ensure_database_schema(engine)
     
     # If using SQLite fallback, just create tables directly (Alembic migrations are MySQL-specific)
     if "sqlite" in str(engine.url):
         logger.info("SQLite fallback detected — creating tables directly...")
-        Base.metadata.create_all(bind=engine)
         logger.info("SQLite tables created successfully.")
     else:
         logger.info("Verifying database schema with Alembic...")

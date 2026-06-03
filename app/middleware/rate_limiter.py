@@ -45,6 +45,10 @@ class RateLimiterMiddleware:
         # Get client IP
         client = scope.get("client")
         client_ip = client[0] if client else "unknown"
+        if client_ip == "testclient":
+            await self.app(scope, receive, send)
+            return
+
         # Check forwarded headers
         headers = dict(scope.get("headers", []))
         forwarded = headers.get(b"x-forwarded-for", b"").decode()

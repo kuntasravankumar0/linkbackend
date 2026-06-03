@@ -17,7 +17,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.create_table(
-        "projects",
+        "alldata",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("unique_id", sa.String(length=36), nullable=False),
         sa.Column("project_name", sa.String(length=255), nullable=False),
@@ -57,15 +57,15 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("unique_id"),
     )
-    op.create_index("ix_projects_id", "projects", ["id"])
-    op.create_index("ix_projects_approval_status", "projects", ["approval_status"])
-    op.create_index("ix_projects_access_type", "projects", ["access_type"])
-    op.create_index("ix_projects_is_deleted", "projects", ["is_deleted"])
+    op.create_index("ix_projects_id", "alldata", ["id"])
+    op.create_index("ix_projects_approval_status", "alldata", ["approval_status"])
+    op.create_index("ix_projects_access_type", "alldata", ["access_type"])
+    op.create_index("ix_projects_is_deleted", "alldata", ["is_deleted"])
 
 
 def downgrade() -> None:
-    op.drop_index("ix_projects_is_deleted", table_name="projects")
-    op.drop_index("ix_projects_access_type", table_name="projects")
-    op.drop_index("ix_projects_approval_status", table_name="projects")
-    op.drop_index("ix_projects_id", table_name="projects")
-    op.drop_table("projects")
+    op.drop_index("ix_projects_is_deleted", table_name="alldata")
+    op.drop_index("ix_projects_access_type", table_name="alldata")
+    op.drop_index("ix_projects_approval_status", table_name="alldata")
+    op.drop_index("ix_projects_id", table_name="alldata")
+    op.drop_table("alldata")
