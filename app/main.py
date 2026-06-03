@@ -281,12 +281,72 @@ def database_health():
         )
 
 
+@app.get("/health/ssl", tags=["System"])
+def ssl_health():
+    """Diagnostic endpoint: Check SSL certificate availability WITHOUT database access."""
+    import os as os_module
+    
+    result = {
+        "ssl_configured": bool(settings.DB_SSL_CA),
+        "database_host": f"{settings.DB_HOST}:{settings.DB_PORT}",
+        "aiven_required_ssl": True,
+    }
+    
+    if not settings.DB_SSL_CA:
+        result["message"] = "No SSL certificate configured"
+        return JSONResponse(status_code=400, content=result)
+    
+    # Check all possible certificate paths
+    backend_root = os_module.path.dirname(os_module.path.dirname(os_module.path.dirname(__file__)))
+    paths_to_check = [
+        ("computed", os_module.join(backend_root, settings.DB_SSL_CA)),
+        ("vercel", "/vercel/path0/ssl/ca.pem"),
+        ("absolute", f"/{settings.DB_SSL_CA.lstrip('/')}" ),
+    ]
+    
+    result["paths_checked"] = {}
+    found_cert = None
+    
+    for name, path in paths_to_check:
+        exists = os_module.path.exists(path)
+        result["paths_checked"][name] = {
+            "path": path,
+            "exists": exists,
+        }
+        
+        if exists and not found_cert:
+            try:
+                with open(path, 'r') as f:
+                    content = f.read()
+                    is_valid = "BEGIN CERTIFICATE" in content
+                    result["paths_checked"][name]["valid"] = is_valid
+                    if is_valid:
+                        found_cert = {
+                            "path": path,
+                            "size_bytes": len(content),
+                            "lines": content.count('\n'),
+                        }
+            except Exception as e:
+                result["paths_checked"][name]["error"] = str(e)
+    
+    if found_cert:
+        result["status"] = "ok"
+        result["certificate"] = found_cert
+        result["message"] = f"SSL certificate found and valid at: {found_cert['path']}"
+    else:
+        result["status"] = "error"
+        result["message"] = "SSL certificate NOT found at any location. Database connection will fail."
+    
+    return result
+
+
 @app.get("/", tags=["System"])
 def root():
     return {
         "message": "ForYou API is running",
         "docs": "/docs",
         "health": "/health",
+        "ssl_diagnostic": "/health/ssl",
         "database_health": "/health/db",
         "database_hint": get_database_hint(),
         "api": "/api/templates",
