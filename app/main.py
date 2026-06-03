@@ -34,45 +34,44 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── Ensure Database Schema is Up to Date ──────────────────────────────────────────
-try:
-    import os
-    from alembic.config import Config
-    from alembic import command
-    
-    # Import all models so Base.metadata knows about them
-    from app.models import Project, ContactMessage, ChatMessage
-    ensure_database_schema(engine)
-    
-    # If using SQLite fallback, just create tables directly (Alembic migrations are MySQL-specific)
-    if "sqlite" in str(engine.url):
-        logger.info("SQLite fallback detected — creating tables directly...")
-        logger.info("SQLite tables created successfully.")
-    elif os.getenv("VERCEL"):
-        logger.info("Skipping Alembic on Vercel; schema guard already ran.")
-    else:
-        logger.info("Verifying database schema with Alembic...")
-        backend_dir = os.path.dirname(os.path.abspath(__file__))
-        alembic_ini_path = os.path.join(os.path.dirname(backend_dir), "alembic.ini")
-        
-        alembic_cfg = Config(alembic_ini_path)
-        alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(backend_dir), "alembic"))
-        
-        try:
-            command.upgrade(alembic_cfg, "head")
-            logger.info("Database schema is up to date.")
-        except Exception as e:
-            err_str = str(e).lower()
-            if "already exists" in err_str or "duplicate" in err_str:
-                logger.info("Tables already exist. Stamping DB to head...")
-                command.stamp(alembic_cfg, "head")
-            elif "no such table" in err_str or "doesn't exist" in err_str:
-                logger.warning(f"Migration skipped (table may not exist yet): {e}")
-            else:
-                raise e
-except Exception as e:
-    logger.warning(f"Schema verification skipped: {type(e).__name__}: {str(e)[:100]}")
-    # Continue — if it fails in a restrictive env, hope the schema is already correct
+# ── Ensure Database Schema in Background (non-blocking startup) ────────────────
+import threading
+
+def _run_schema_setup():
+    try:
+        from app.models import Project, ContactMessage, ChatMessage
+        if "sqlite" in str(engine.url):
+            from app.db.database import Base
+            logger.info("SQLite: creating tables...")
+            Base.metadata.create_all(bind=engine)
+            logger.info("SQLite tables ready.")
+        elif not os.getenv("VERCEL"):
+            logger.info("Running schema setup (background)...")
+            ensure_database_schema(engine)
+            logger.info("Schema setup complete.")
+            # Run Alembic migrations
+            from alembic.config import Config
+            from alembic import command
+            backend_dir = os.path.dirname(os.path.abspath(__file__))
+            alembic_ini_path = os.path.join(os.path.dirname(backend_dir), "alembic.ini")
+            alembic_cfg = Config(alembic_ini_path)
+            alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(backend_dir), "alembic"))
+            try:
+                command.upgrade(alembic_cfg, "head")
+                logger.info("Alembic: schema up to date.")
+            except Exception as e:
+                err_str = str(e).lower()
+                if "already exists" in err_str or "duplicate" in err_str:
+                    command.stamp(alembic_cfg, "head")
+                else:
+                    logger.warning(f"Alembic: {type(e).__name__}: {str(e)[:100]}")
+        else:
+            logger.info("VERCEL: running schema guard only...")
+            ensure_database_schema(engine)
+    except Exception as e:
+        logger.warning(f"Schema setup skipped: {type(e).__name__}: {str(e)[:100]}")
+
+threading.Thread(target=_run_schema_setup, daemon=True, name="schema-setup").start()
 
 # ── App ────────────────────────────────────────────────────────────────────────
 app = FastAPI(

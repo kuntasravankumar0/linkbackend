@@ -101,31 +101,31 @@ def _build_engine():
 
     connect_args = _build_connect_args()
     
-    # ── Serverless-optimized connection pooling ────────────────────────────────
-    # Vercel/AWS Lambda: each invocation gets new process. Use NullPool:
-    # - Creates fresh connection per request, closes immediately
-    # - Prevents connection exhaustion and stale connections
-    # - Standard practice for serverless/Lambda environments
-    logger.info("✓ Database: MySQL with NullPool (Vercel serverless)")
-    logger.info(f"Connection URL: mysql+pymysql://{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}")
-    logger.info(f"Connect args: timeout={connect_args.get('connect_timeout')}s, SSL={'enabled' if 'ssl' in connect_args else 'disabled'}")
+    # Persistent connection pool — reuses connections, much faster after first request
+    # For Vercel serverless, NullPool is safer but slower — use QueuePool for persistent servers
+    is_serverless = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
     
-    engine = create_engine(
-        settings.database_url,
-        connect_args=connect_args,
-        poolclass=NullPool,  # Vercel serverless — new connection per request
-        pool_pre_ping=True,
-        echo=settings.DEBUG,
-    )
-    
-    # Add event listener for connection errors — log and continue
-    @event.listens_for(engine, "connect")
-    def receive_connect(dbapi_conn, connection_record):
-        logger.debug("Database connection established")
-    
-    @event.listens_for(engine, "checkout")
-    def receive_checkout(dbapi_conn, connection_record, connection_proxy):
-        logger.debug("Database connection checked out")
+    if is_serverless:
+        logger.info("✓ Database: MySQL with NullPool (serverless)")
+        engine = create_engine(
+            settings.database_url,
+            connect_args=connect_args,
+            poolclass=NullPool,
+            pool_pre_ping=True,
+            echo=settings.DEBUG,
+        )
+    else:
+        logger.info("✓ Database: MySQL with persistent connection pool (fast reuse)")
+        engine = create_engine(
+            settings.database_url,
+            connect_args=connect_args,
+            pool_size=5,
+            max_overflow=10,
+            pool_timeout=20,
+            pool_recycle=280,   # Recycle before Aiven's 5-min idle timeout
+            pool_pre_ping=True,
+            echo=settings.DEBUG,
+        )
     
     return engine
 
@@ -172,31 +172,8 @@ class Base(DeclarativeBase):
 
 
 def get_db():
-    """
-    FastAPI dependency — yields a DB session per request.
-    Includes retry logic for transient cloud database connection failures.
-    """
-    max_retries = 2
-    db = None
-    
-    for attempt in range(max_retries + 1):
-        try:
-            db = SessionLocal()
-            # Verify connection is alive before yielding
-            db.execute(text("SELECT 1"))
-            break
-        except Exception as e:
-            if db:
-                try: db.close()
-                except Exception: pass
-                db = None
-            if attempt < max_retries:
-                time.sleep(0.3 * (attempt + 1))
-                logger.warning(f"DB connection retry {attempt + 1}/{max_retries}: {type(e).__name__}")
-            else:
-                logger.error(f"DB connection failed after {max_retries + 1} attempts: {type(e).__name__}: {str(e)[:200]}")
-                raise
-
+    """FastAPI dependency — yields a DB session per request."""
+    db = SessionLocal()
     try:
         yield db
     except Exception as e:
@@ -205,4 +182,3 @@ def get_db():
         raise
     finally:
         db.close()
-        logger.debug("DB session closed")
