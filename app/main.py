@@ -3,12 +3,14 @@ FastAPI application — production-ready entry point.
 Port: 8081 (matches frontend VITE_API_BASE_URL default)
 """
 import logging
+import os
 import time
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config.settings import settings
@@ -185,10 +187,46 @@ def health():
     return {
         "status": "ok",
         "version": "2.0.0",
+        "commit": os.getenv("VERCEL_GIT_COMMIT_SHA", "local")[:12],
         "port": settings.APP_PORT,
         "debug": settings.DEBUG,
         "database": engine.url.drivername,
     }
+
+@app.get("/health/db", tags=["System"])
+def database_health():
+    """Safe production DB diagnostic: no credentials, only schema/query status."""
+    try:
+        inspector = inspect(engine)
+        tables = sorted(inspector.get_table_names())
+        result = {"status": "ok", "database": engine.url.drivername, "tables": tables}
+
+        if inspector.has_table("alldata"):
+            result["alldata_columns"] = [
+                column["name"] for column in inspector.get_columns("alldata")
+            ]
+            with engine.connect() as conn:
+                result["alldata_count"] = conn.execute(
+                    text("SELECT COUNT(*) FROM alldata")
+                ).scalar()
+                result["templates_query"] = conn.execute(
+                    text(
+                        "SELECT id, unique_id, project_name, access_type, approval_status "
+                        "FROM alldata WHERE is_deleted = 0 ORDER BY created_at DESC LIMIT 1"
+                    )
+                ).mappings().first() is not None
+
+        return result
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "database": engine.url.drivername,
+                "error_type": type(exc).__name__,
+                "error": str(exc)[:500],
+            },
+        )
 
 @app.get("/", tags=["System"])
 def root():
