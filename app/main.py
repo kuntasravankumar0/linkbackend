@@ -214,10 +214,30 @@ def get_database_hint() -> str:
 @app.get("/health/db", tags=["System"])
 def database_health():
     """Safe production DB diagnostic: no credentials, only schema/query status."""
+    import os as os_module
+    
+    # Check SSL certificate if configured
+    ssl_diagnostic = {}
+    if settings.DB_SSL_CA:
+        backend_root = os_module.path.dirname(os_module.path.dirname(os_module.path.dirname(__file__)))
+        ca_path = os_module.path.join(backend_root, settings.DB_SSL_CA)
+        ssl_diagnostic["configured"] = True
+        ssl_diagnostic["path"] = ca_path
+        ssl_diagnostic["exists"] = os_module.path.exists(ca_path)
+        
+        if not os_module.path.exists(ca_path):
+            # Try Vercel path
+            alt_path = f"/vercel/path0/{settings.DB_SSL_CA}"
+            ssl_diagnostic["alt_path"] = alt_path
+            ssl_diagnostic["alt_exists"] = os_module.path.exists(alt_path)
+    
     try:
         inspector = inspect(engine)
         tables = sorted(inspector.get_table_names())
         result = {"status": "ok", "database": engine.url.drivername, "tables": tables}
+        
+        if ssl_diagnostic:
+            result["ssl_certificate"] = ssl_diagnostic
 
         if inspector.has_table("alldata"):
             result["alldata_columns"] = [
@@ -241,19 +261,23 @@ def database_health():
         result["hint"] = get_database_hint()
         return result
     except Exception as exc:
+        error_response = {
+            "status": "error",
+            "database": engine.url.drivername,
+            "error_type": type(exc).__name__,
+            "error": str(exc)[:500],
+            "message": (
+                "If this is the only issue, your database/MySQL connection is likely failing while "
+                "the rest of the API remains available."
+            ),
+            "hint": get_database_hint(),
+        }
+        if ssl_diagnostic:
+            error_response["ssl_certificate"] = ssl_diagnostic
+        
         return JSONResponse(
             status_code=500,
-            content={
-                "status": "error",
-                "database": engine.url.drivername,
-                "error_type": type(exc).__name__,
-                "error": str(exc)[:500],
-                "message": (
-                    "If this is the only issue, your database/MySQL connection is likely failing while "
-                    "the rest of the API remains available."
-                ),
-                "hint": get_database_hint(),
-            },
+            content=error_response,
         )
 
 

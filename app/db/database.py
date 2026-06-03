@@ -22,6 +22,7 @@ def _build_connect_args() -> dict:
         "connect_timeout": 15,
         "read_timeout": 20,
         "write_timeout": 20,
+        "charset": "utf8mb4",
     }
 
     if not settings.DB_SSL_CA:
@@ -32,11 +33,29 @@ def _build_connect_args() -> dict:
     backend_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     ca_path = os.path.join(backend_root, settings.DB_SSL_CA)
     
-    logger.debug(f"SSL certificate path: {ca_path}")
+    logger.info(f"SSL certificate path (computed): {ca_path}")
+    logger.info(f"Backend root: {backend_root}")
 
     if not os.path.exists(ca_path):
-        logger.warning(f"SSL CA file NOT found at: {ca_path} — attempting connection without SSL")
-        return connect_args
+        # Try alternative path — might be in /vercel/path0 on Vercel
+        alt_ca_paths = [
+            "/vercel/path0/ssl/ca.pem",
+            os.path.abspath(ca_path),
+        ]
+        found = False
+        for alt_path in alt_ca_paths:
+            if os.path.exists(alt_path):
+                ca_path = alt_path
+                found = True
+                logger.info(f"Found SSL cert at alternative path: {alt_path}")
+                break
+        
+        if not found:
+            logger.error(f"SSL CA file NOT found at: {ca_path} or alternatives")
+            logger.error(f"Aiven requires SSL. Connection will likely fail.")
+            # For Aiven REQUIRED SSL, try with just ssl flag
+            connect_args["ssl"] = True
+            return connect_args
 
     try:
         with open(ca_path, 'r') as f:
@@ -44,11 +63,12 @@ def _build_connect_args() -> dict:
             if "BEGIN CERTIFICATE" not in cert_content:
                 logger.error(f"Invalid SSL certificate format at: {ca_path}")
                 return connect_args
+            logger.info(f"✓ SSL certificate validated — {len(cert_content)} bytes")
     except Exception as e:
         logger.error(f"Failed to read SSL certificate at {ca_path}: {e}")
         return connect_args
 
-    logger.info(f"✓ SSL enabled — CA cert loaded")
+    logger.info(f"✓ SSL enabled for Aiven — CA cert loaded from: {ca_path}")
     connect_args["ssl"] = {"ca": ca_path}
     return connect_args
 
@@ -79,14 +99,14 @@ def _build_engine():
     # - Creates fresh connection per request, closes immediately
     # - Prevents connection exhaustion and stale connections
     # - Standard practice for serverless/Lambda environments
-    logger.info("✓ Database: MySQL with small QueuePool (serverless warm-instance reuse)")
+    logger.info("✓ Database: MySQL with NullPool (Vercel serverless)")
+    logger.info(f"Connection URL: mysql+pymysql://{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}")
+    logger.info(f"Connect args: timeout={connect_args.get('connect_timeout')}s, SSL={'enabled' if 'ssl' in connect_args else 'disabled'}")
     
     engine = create_engine(
         settings.database_url,
         connect_args=connect_args,
-        pool_size=1,
-        max_overflow=1,
-        pool_recycle=120,
+        poolclass=NullPool,  # Vercel serverless — new connection per request
         pool_pre_ping=True,
         echo=settings.DEBUG,
     )
