@@ -48,6 +48,8 @@ try:
     if "sqlite" in str(engine.url):
         logger.info("SQLite fallback detected — creating tables directly...")
         logger.info("SQLite tables created successfully.")
+    elif os.getenv("VERCEL"):
+        logger.info("Skipping Alembic on Vercel; schema guard already ran.")
     else:
         logger.info("Verifying database schema with Alembic...")
         backend_dir = os.path.dirname(os.path.abspath(__file__))

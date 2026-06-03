@@ -18,9 +18,15 @@ logger = logging.getLogger(__name__)
 
 def _build_connect_args() -> dict:
     """Build SSL connect_args for Aiven cloud MySQL with defensive error handling."""
+    connect_args = {
+        "connect_timeout": 15,
+        "read_timeout": 20,
+        "write_timeout": 20,
+    }
+
     if not settings.DB_SSL_CA:
         logger.debug("No SSL certificate configured (DB_SSL_CA not set)")
-        return {}
+        return connect_args
 
     # Resolve path relative to backend root (two levels up from app/db/)
     backend_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -30,20 +36,21 @@ def _build_connect_args() -> dict:
 
     if not os.path.exists(ca_path):
         logger.warning(f"SSL CA file NOT found at: {ca_path} — attempting connection without SSL")
-        return {}
+        return connect_args
 
     try:
         with open(ca_path, 'r') as f:
             cert_content = f.read()
             if "BEGIN CERTIFICATE" not in cert_content:
                 logger.error(f"Invalid SSL certificate format at: {ca_path}")
-                return {}
+                return connect_args
     except Exception as e:
         logger.error(f"Failed to read SSL certificate at {ca_path}: {e}")
-        return {}
+        return connect_args
 
     logger.info(f"✓ SSL enabled — CA cert loaded")
-    return {"ssl": {"ca": ca_path}}
+    connect_args["ssl"] = {"ca": ca_path}
+    return connect_args
 
 
 def _build_engine():
@@ -69,14 +76,16 @@ def _build_engine():
     # - Creates fresh connection per request, closes immediately
     # - Prevents connection exhaustion and stale connections
     # - Standard practice for serverless/Lambda environments
-    logger.info("✓ Database: MySQL with NullPool (serverless optimized)")
+    logger.info("✓ Database: MySQL with small QueuePool (serverless warm-instance reuse)")
     
     engine = create_engine(
         settings.database_url,
         connect_args=connect_args,
-        poolclass=pool.NullPool,  # No pooling — fresh conn per request
-        pool_pre_ping=True,       # Verify connection is alive before use
-        echo=settings.DEBUG,      # log SQL queries in debug mode
+        pool_size=1,
+        max_overflow=1,
+        pool_recycle=120,
+        pool_pre_ping=True,
+        echo=settings.DEBUG,
     )
     
     # Add event listener for connection errors — log and continue
